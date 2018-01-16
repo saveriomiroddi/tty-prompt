@@ -400,7 +400,106 @@ RSpec.describe TTY::Prompt, '#select' do
     prompt.input.rewind
 
     expect {
-      prompt.select('What size?', choices, default: 10)
+      prompt.select("What size?", choices, default: 10)
     }.to raise_error(TTY::Prompt::ConfigurationError, /`10` out of range \(1 - 3\)/)
+  end
+
+  context "with filter" do
+    it "doesn't allow mixing enumeration and filter" do
+      prompt = TTY::TestPrompt.new
+
+      expect {
+        prompt.select("What size?", [], enum: '.', filter: true)
+      }.to raise_error(TTY::Prompt::ConfigurationError, "Enumeration can't be used with filter")
+    end
+
+    it "filters and chooses a uniquely matching entry, ignoring case" do
+      prompt = TTY::TestPrompt.new
+      choices = %w(Small Medium Large Huge)
+
+      prompt.input << "U" << "g"  << "\r"
+      prompt.input.rewind
+
+      actual_value = prompt.select("What size?", choices, filter: true)
+      expected_value = "Huge"
+
+      expect(actual_value).to eql(expected_value)
+
+      actual_prompt_output = prompt.output.string
+
+      expected_prompt_output =
+        "\e[?25lWhat size? \e[90m(Use arrow keys, press Enter to select, and alphanumeric/underscore characters to filter)\e[0m\n" \
+        "\e[32m‣ Small\e[0m\n" \
+        "  Medium\n" \
+        "  Large\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"U\")\e[0m\n" \
+        "\e[32m‣ Medium\e[0m\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"Ug\")\e[0m\n" \
+        "\e[32m‣ Huge\e[0m\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[32mHuge\e[0m\n" \
+        "\e[?25h"
+
+      expect(actual_prompt_output).to eql(expected_prompt_output)
+    end
+
+    it "filters and chooses the first of multiple matching entries" do
+      prompt = TTY::TestPrompt.new
+      choices = %w(Small Medium Large Huge)
+
+      prompt.input << "g"  << "\r"
+      prompt.input.rewind
+
+      actual_value = prompt.select("What size?", choices, filter: true)
+      expected_value = "Large"
+
+      expect(actual_value).to eql(expected_value)
+
+      actual_prompt_output = prompt.output.string
+      expected_prompt_output =
+        "\e[?25lWhat size? \e[90m(Use arrow keys, press Enter to select, and alphanumeric/underscore characters to filter)\e[0m\n"\
+        "\e[32m‣ Small\e[0m\n"\
+        "  Medium\n"\
+        "  Large\n"\
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"g\")\e[0m\n"\
+        "\e[32m‣ Large\e[0m\n"\
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[32mLarge\e[0m\n"\
+        "\e[?25h"
+
+      expect(actual_prompt_output).to eql(expected_prompt_output)
+    end
+
+    # This test can't be done in an exact way, at least, with the current framework
+    it "doesn't exit when there are no matching entries" do
+      prompt = TTY::TestPrompt.new
+      choices = %w(Tiny Medium Large Huge)
+
+      prompt.input << "z" << "\r"    # shows no entry, blocking exit
+      prompt.input << "\u007F"       # reset filter (backspace) and show all
+      prompt.input << "a" << "\r"
+      prompt.input.rewind
+
+      actual_value = prompt.select("What size?", choices, filter: true)
+      expected_value = "Large"
+
+      expect(actual_value).to eql(expected_value)
+
+      actual_prompt_output = prompt.output.string
+
+      expected_prompt_output =
+        "\e[?25lWhat size? \e[90m(Use arrow keys, press Enter to select, and alphanumeric/underscore characters to filter)\e[0m\n" \
+        "\e[32m‣ Tiny\e[0m\n" \
+        "  Medium\n" \
+        "  Large\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"z\")\e[0m\n" \
+        "\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"z\")\e[0m\n" \
+        "\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \n" \
+        "\e[32m‣ Tiny\e[0m\n" \
+        "  Medium\n" \
+        "  Large\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"a\")\e[0m\n" \
+        "\e[32m‣ Large\e[0m\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[32mLarge\e[0m\n" \
+        "\e[?25h"
+
+      expect(actual_prompt_output).to eql(expected_prompt_output)
+    end
   end
 end

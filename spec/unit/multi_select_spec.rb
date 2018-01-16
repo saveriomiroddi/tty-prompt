@@ -375,4 +375,42 @@ RSpec.describe TTY::Prompt do
       "What letter? \e[32mA\e[0m\n\e[?25h"
     )
   end
+
+  context "with filter" do
+    it "doesn't lose the selection when switching between filters" do
+      prompt = TTY::TestPrompt.new
+      choices = %w(Tiny Medium Large Huge)
+
+      prompt.input << " "         # select `Tiny`
+      prompt.input << "a" << " "  # match and select `Large`
+      prompt.input << "\u007F"    # backspace (shows all)
+      prompt.input << "\r"
+      prompt.input.rewind
+
+      actual_values = prompt.multi_select("What size?", choices, filter: true)
+      expected_values = %w(Tiny Large)
+
+      expect(actual_values).to eql(expected_values)
+
+      actual_prompt_output = prompt.output.string
+      expected_prompt_output =
+        "\e[?25lWhat size? \e[90m(Use arrow keys, press Space to select and Enter to finish, and alphanumeric/underscore characters to filter)\e[0m\n" \
+        "‣ ⬡ Tiny\n" \
+        "  ⬡ Medium\n" \
+        "  ⬡ Large\n" \
+        "  ⬡ Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? Tiny\n" \
+        "‣ \e[32m⬢\e[0m Tiny\n" \
+        "  ⬡ Medium\n" \
+        "  ⬡ Large\n  ⬡ Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? Tiny (Filter: \"a\")\n" \
+        "‣ ⬡ Large\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? Tiny, Large (Filter: \"a\")\n" \
+        "‣ \e[32m⬢\e[0m Large\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? Tiny, Large\n" \
+        "‣ \e[32m⬢\e[0m Tiny\n" \
+        "  ⬡ Medium\n" \
+        "  \e[32m⬢\e[0m Large\n" \
+        "  ⬡ Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[32mTiny, Large\e[0m\n" \
+        "\e[?25h"
+
+      expect(actual_prompt_output).to eql(expected_prompt_output)
+    end
+  end
 end

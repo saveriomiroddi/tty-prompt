@@ -1,5 +1,7 @@
 # encoding: utf-8
 
+require "English"
+
 require_relative 'choices'
 require_relative 'paginator'
 require_relative 'symbols'
@@ -13,9 +15,12 @@ module TTY
     class List
       include Symbols
 
-      HELP = '(Use arrow%s keys, press Enter to select)'
+      HELP = '(Use arrow%s keys, press Enter to select%s)'
 
       PAGE_HELP = '(Move up or down to reveal more choices)'
+
+      # Allowed keys for filter, along with backspace.
+      FILTER_KEYS_MATCHER = /\A\w\Z/
 
       # Create instance of TTY::Prompt::List menu.
       #
@@ -32,6 +37,8 @@ module TTY
       #
       # @api public
       def initialize(prompt, options = {})
+        check_options_consistency(options)
+
         @prompt       = prompt
         @prefix       = options.fetch(:prefix) { @prompt.prefix }
         @enum         = options.fetch(:enum) { nil }
@@ -48,6 +55,7 @@ module TTY
         @per_page     = options[:per_page]
         @page_help    = options[:page_help] || PAGE_HELP
         @paginator    = Paginator.new
+        @choices_filter = options.fetch(:filter) { false } ? "" : nil
 
         @prompt.subscribe(self)
       end
@@ -83,7 +91,7 @@ module TTY
       #
       # @api private
       def paginated?
-        @choices.size > page_size
+        visible_choices.size > page_size
       end
 
       # @param [String] text
@@ -111,7 +119,16 @@ module TTY
       #
       # @api public
       def default_help
-        self.class::HELP % [enumerate? ? " or number (1-#{@choices.size})" : '']
+        # Note that enumeration and filter are mutually exclusive
+        tokens = if enumerate?
+                   [" or number (1-#{visible_choices.size})", ""]
+                 elsif @choices_filter
+                   ["", ", and alphanumeric/underscore characters to filter"]
+                 else
+                   ["", ""]
+                 end
+
+        format(self.class::HELP, *tokens)
       end
 
       # Set selecting active index using number pad
@@ -166,26 +183,26 @@ module TTY
       def keynum(event)
         return unless enumerate?
         value = event.value.to_i
-        return unless (1..@choices.count).cover?(value)
+        return unless (1..visible_choices.count).cover?(value)
         @active = value
       end
 
       def keyenter(*)
-        @done = true
+        @done = true unless visible_choices.empty?
       end
       alias keyreturn keyenter
       alias keyspace keyenter
 
       def keyup(*)
         if @active == 1
-          @active = @choices.length if @cycle
+          @active = visible_choices.length if @cycle
         else
           @active -= 1
         end
       end
 
       def keydown(*)
-        if @active == @choices.length
+        if @active == visible_choices.length
           @active = 1 if @cycle
         else
           @active += 1
@@ -193,7 +210,30 @@ module TTY
       end
       alias keytab keydown
 
+      def keypress(event)
+        return unless @choices_filter
+
+        if event.value =~ FILTER_KEYS_MATCHER
+          @choices_filter += event.value
+          @active = 1
+        end
+      end
+
+      def keybackspace(*)
+        return unless @choices_filter
+
+        @choices_filter = @choices_filter[0..-2]
+        @active = 1
+      end
+
       private
+
+      def check_options_consistency(options)
+        if options.key?(:enum) && options.key?(:filter)
+          raise ConfigurationError,
+                "Enumeration can't be used with filter"
+        end
+      end
 
       # Setup default option and active selection
       #
@@ -210,11 +250,11 @@ module TTY
         @default.each do |d|
           if d.nil? || d.to_s.empty?
             raise ConfigurationError,
-                 "default index must be an integer in range (1 - #{@choices.size})"
+                 "default index must be an integer in range (1 - #{visible_choices.size})"
           end
-          if d < 1 || d > @choices.size
+          if d < 1 || d > visible_choices.size
             raise ConfigurationError,
-                 "default index `#{d}` out of range (1 - #{@choices.size})"
+                 "default index `#{d}` out of range (1 - #{visible_choices.size})"
           end
         end
       end
@@ -233,7 +273,12 @@ module TTY
           question = render_question
           @prompt.print(question)
           @prompt.read_keypress
-          @prompt.print(refresh(question.lines.count))
+
+          # Split manually; if the second line is blank (when there are not
+          # matching lines), it won't be included by using String#lines.
+          question_lines = question.split($INPUT_RECORD_SEPARATOR, -1)
+
+          @prompt.print(refresh(question_lines.count))
         end
         @prompt.print(render_question)
         answer
@@ -247,7 +292,7 @@ module TTY
       #
       # @api private
       def answer
-        @choices[@active - 1].value
+        visible_choices[@active - 1].value
       end
 
       # Clear screen lines
@@ -280,10 +325,12 @@ module TTY
       # @api private
       def render_header
         if @done
-          selected_item = "#{@choices[@active - 1].name}"
+          selected_item = "#{visible_choices[@active - 1].name}"
           @prompt.decorate(selected_item, @active_color)
         elsif @first_render
           @prompt.decorate(help, @help_color)
+        elsif @choices_filter.to_s != ""
+          @prompt.decorate(filter_help, @help_color)
         end
       end
 
@@ -294,7 +341,8 @@ module TTY
       # @api private
       def render_menu
         output = ''
-        @paginator.paginate(@choices, @active, @per_page) do |choice, index|
+
+        @paginator.paginate(visible_choices, @active, @per_page) do |choice, index|
           num = enumerate? ? (index + 1).to_s + @enum + ' ' : ''
           message = if index + 1 == @active
                       selected = @marker + ' ' + num + choice.name
@@ -302,10 +350,11 @@ module TTY
                     else
                       ' ' * 2 + num + choice.name
                     end
-          max_index = paginated? ? @paginator.max_index : @choices.size - 1
+          max_index = paginated? ? @paginator.max_index : visible_choices.size - 1
           newline = (index == max_index) ? '' : "\n"
           output << (message + newline)
         end
+
         output
       end
 
@@ -318,6 +367,30 @@ module TTY
         return '' unless paginated?
         colored_footer = @prompt.decorate(@page_help, @help_color)
         "\n" << colored_footer
+      end
+
+      # Choices matching the filter, if set; otherwise, all choices
+      #
+      # @return [Choice]
+      #
+      # @api private
+      def visible_choices
+        if @choices_filter.to_s != ""
+          @choices.select do |the_choice|
+            the_choice.name.downcase.include?(@choices_filter.downcase)
+          end
+        else
+          @choices
+        end
+      end
+
+      # Header part showing the current filter
+      #
+      # @return String
+      #
+      # @api private
+      def filter_help
+        "(Filter: #{@choices_filter.inspect})"
       end
     end # List
   end # Prompt
