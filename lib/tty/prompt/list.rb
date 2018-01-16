@@ -41,22 +41,22 @@ module TTY
       def initialize(prompt, options = {})
         check_options_consistency(options)
 
-        @prompt       = prompt
-        @prefix       = options.fetch(:prefix) { @prompt.prefix }
-        @enum         = options.fetch(:enum) { nil }
-        @default      = Array[options.fetch(:default) { 1 }]
-        @active       = @default.first
-        @choices      = Choices.new
-        @active_color = options.fetch(:active_color) { @prompt.active_color }
-        @help_color   = options.fetch(:help_color) { @prompt.help_color }
-        @marker       = options.fetch(:marker) { symbols[:pointer] }
-        @cycle        = options.fetch(:cycle) { false }
-        @help         = options[:help]
-        @first_render = true
-        @done         = false
-        @per_page     = options[:per_page]
-        @page_help    = options[:page_help] || PAGE_HELP
-        @paginator    = Paginator.new
+        @prompt         = prompt
+        @prefix         = options.fetch(:prefix) { @prompt.prefix }
+        @enum           = options.fetch(:enum) { nil }
+        @default        = Array[options.fetch(:default) { 1 }]
+        @active         = @default.first
+        @choices        = Choices.new
+        @active_color   = options.fetch(:active_color) { @prompt.active_color }
+        @help_color     = options.fetch(:help_color) { @prompt.help_color }
+        @marker         = options.fetch(:marker) { symbols[:pointer] }
+        @cycle          = options.fetch(:cycle) { false }
+        @help           = options[:help]
+        @first_render   = true
+        @done           = false
+        @per_page       = options[:per_page]
+        @page_help      = options[:page_help] || PAGE_HELP
+        @paginator      = Paginator.new
         @choices_filter = options.fetch(:filter) { false } ? "" : nil
 
         @prompt.subscribe(self)
