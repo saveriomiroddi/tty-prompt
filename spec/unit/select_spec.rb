@@ -501,5 +501,35 @@ RSpec.describe TTY::Prompt, '#select' do
 
       expect(actual_prompt_output).to eql(expected_prompt_output)
     end
+
+    it "cancels a selection" do
+      prompt = TTY::TestPrompt.new
+      choices = %w(Small Medium Large Huge)
+
+      prompt.input << "H"
+      prompt.input << TTY::Prompt::List::KEY_CANC << "\r"
+      prompt.input.rewind
+
+      actual_value = prompt.select("What size?", choices, filter: true)
+      expected_value = "Small"
+
+      expect(actual_value).to eql(expected_value)
+
+      actual_prompt_output = prompt.output.string
+      expected_prompt_output =
+        "\e[?25lWhat size? \e[90m(Use arrow keys, press Enter to select, and alphanumeric/underscore characters to filter)\e[0m\n" \
+        "\e[32m‣ Small\e[0m\n" \
+        "  Medium\n" \
+        "  Large\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[90m(Filter: \"H\")\e[0m\n" \
+        "\e[32m‣ Huge\e[0m\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \n" \
+        "\e[32m‣ Small\e[0m\n" \
+        "  Medium\n" \
+        "  Large\n" \
+        "  Huge\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1G\e[1A\e[2K\e[1GWhat size? \e[32mSmall\e[0m\n" \
+        "\e[?25h"
+
+      expect(actual_prompt_output).to eql(expected_prompt_output)
+    end
   end
 end

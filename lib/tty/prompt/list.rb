@@ -19,7 +19,9 @@ module TTY
 
       PAGE_HELP = '(Move up or down to reveal more choices)'
 
-      # Allowed keys for filter, along with backspace.
+      KEY_CANC = "\e[3~".freeze
+
+      # Allowed keys for filter, along with backspace and canc.
       FILTER_KEYS_MATCHER = /\A\w\Z/
 
       # Create instance of TTY::Prompt::List menu.
@@ -215,6 +217,9 @@ module TTY
 
         if event.value =~ FILTER_KEYS_MATCHER
           @choices_filter += event.value
+          @active = 1
+        elsif event.value == KEY_CANC
+          @choices_filter = ""
           @active = 1
         end
       end
