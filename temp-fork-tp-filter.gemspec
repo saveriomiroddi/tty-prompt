@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.name          = "temp-fork-tp-filter"
   spec.version       = TTY::Prompt::VERSION
   spec.authors       = ["See the tty-prompt website"]
-  spec.date          = '2018-01-18'
+  spec.date          = '2018-01-19'
   spec.email         = [""]
   spec.summary       = %q{Temporary fork of tty-prompt}
   spec.description   = %q{Temporary fork of tty-prompt}
